@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: cobre-notification-events
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cobre
+    username: cobre
+    password: cobre
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+
+  # Flyway - Disable validation for local development
+  flyway:
+    enabled: true
+    validate-on-migrate: false
+    out-of-order: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: notification-delivery
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    listener:
+      type: batch
+      poll-timeout: 3000
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      simple:
+        enabled: true
+
+# Resilience4j - Retry Configuration
+resilience4j:
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 1000
+        interval-function: exponential
+        exponential-backoff-multiplier: 2
+    instances:
+      webhookDelivery:
+        base-config: default
+
+  # Resilience4j - Circuit Breaker Configuration
+  circuitbreaker:
+    configs:
+      default:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30000
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      webhookDelivery:
+        base-config: default
+
+logging:
+  level:
+    root: INFO
+    com.cobre.notification: DEBUG
+    io.github.resilience4j: INFO
+    org.springframework.kafka: INFO
+    org.flywaydb: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{traceId},%X{spanId}] %-5p %c{1} - %m%n"
